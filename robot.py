@@ -1,39 +1,12 @@
 import wpilib.simulation
 import wpilib, wpimath, math, commands2
-
-import ntcore
-
 import wpimath.controller
 import wpimath.system
 import wpimath.system.plant
 import wpimath.trajectory
-
 import phoenix6.hardware
+from dumbdashboard import DumbDashboard
 
-
-class DumbDashboard:
-    inst = ntcore.NetworkTableInstance.getDefault()
-    table = inst.getTable("DumbDashboard")
-    things: dict[str, dict[str, ntcore.StringEntry]] = {}
-
-    @classmethod
-    def grab(cls, name, default, type_=str):
-        default = str(default)
-        if name not in cls.things:
-            cls.things[name] = {"type": type_, "sub": cls.table.getStringTopic(name).subscribe(default)}
-        elif name in cls.things and len(cls.things[name]) == 2:
-            print("Reached fine")
-            cls.things[name].update({"sub": cls.table.getStringTopic(name).subscribe(default)})
-        return cls.things[name]["type"](cls.things[name]["sub"].get(default))
-
-    @classmethod
-    def put(cls, name, value, type_=str):
-        value = str(value)
-        if name not in cls.things:
-            cls.things[name] = {"type": type_, "pub": cls.table.getStringTopic(name).publish()}
-        elif name in cls.things and len(cls.things[name]) == 2:
-            cls.things[name].update({"pub": cls.table.getStringTopic(name).publish()})
-        cls.things[name]["pub"].set(value)
 
 class Elevator(commands2.Subsystem):
     def __init__(self):
@@ -85,6 +58,8 @@ class Elevator(commands2.Subsystem):
             wpimath.system.plant.DCMotor.krakenX60(2),
             self.gearRatio,
             10, self.sprocketRadius, 0, 1.87, True, 0)
+        
+        self.refresh_motors(True)
 
     def periodic(self):
         self.m1.set_control(phoenix6.controls.Follower(14, False))
@@ -123,6 +98,20 @@ class Elevator(commands2.Subsystem):
     
 
 
+    def refresh_motors(self, set=False):
+        if set:
+            self.motor_configs.slot0.k_p = DumbDashboard.put('k_p', 0, float)
+            self.motor_configs.slot0.k_i = DumbDashboard.put('k_i', 0, float)
+            self.motor_configs.slot0.k_d = DumbDashboard.put('k_d', 0, float)
+            self.motor_configs.slot0.k_g = DumbDashboard.put('k_g', 0, float)
+
+
+        self.motor_configs.slot0.k_p = DumbDashboard.grab('k_p', 0, float)
+        self.motor_configs.slot0.k_i = DumbDashboard.grab('k_i', 0, float)
+        self.motor_configs.slot0.k_d = DumbDashboard.grab('k_d', 0, float)
+        self.motor_configs.slot0.k_g = DumbDashboard.grab('k_g', 0, float)
+
+
 class Robot(commands2.TimedCommandRobot):
     def __init__(self):
         super().__init__()
@@ -131,6 +120,7 @@ class Robot(commands2.TimedCommandRobot):
         # commands2.button.Trigger()
         xctl = commands2.button.CommandXboxController(0)
         xctl.a().onTrue(self.elevator.goToPos(0.4))
+        xctl.b().onTrue(commands2.cmd.run(lambda: self.elevator.refresh_motors(False)))
 
     def teleopPeriodic(self):
         print(DumbDashboard.grab('Slag', 12, float))
